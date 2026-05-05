@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tabela-precos-v6';
+const CACHE_NAME = 'tabela-precos-v7';
 const ASSETS = [
   './index.html',
   './admin.html',

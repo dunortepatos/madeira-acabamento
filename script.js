@@ -295,6 +295,36 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeModal();
 });
 
+async function forceAppRefresh() {
+  const button = document.querySelector('[onclick="forceAppRefresh()"]');
+  const originalText = button ? button.textContent : '';
+  if (button) {
+    button.disabled = true;
+    button.textContent = '⏳';
+  }
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(reg => reg.update()));
+    }
+
+    if ('caches' in window) {
+      const names = await caches.keys();
+      await Promise.all(names.map(name => caches.delete(name)));
+    }
+
+    window.location.reload();
+  } catch (err) {
+    console.error(err);
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+    alert('Não consegui atualizar automaticamente. Feche e abra o app novamente.');
+  }
+}
+
 // ── Init ───────────────────────────────────────────────────────────────
 buildCategories();
 showScreen('screen-home');
