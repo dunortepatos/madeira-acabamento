@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#c0392b" />
+  <meta name="theme-color" content="#f7f7f2" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Tabela de Preços" />
   <title>Tabela de Preços</title>
   <link rel="manifest" href="manifest.json" />
@@ -53,7 +53,12 @@
       <p class="result-count" id="resultCount"></p>
 
       <div class="table-wrap">
-        <table>
+        <table class="product-table">
+          <colgroup>
+            <col class="col-code" />
+            <col class="col-product" />
+            <col class="col-price" />
+          </colgroup>
           <thead>
             <tr>
               <th id="th-codigo"  onclick="onSort('codigo')">Código <span class="sort-arrow">⇅</span></th>
@@ -99,7 +104,7 @@
   <script>
     // Wire back button: go to subcat if has subcategories, else home
     document.getElementById('btnBackProd').addEventListener('click', () => {
-      const cat = window.CATEGORIAS
+      const cat = typeof CATEGORIAS !== 'undefined'
         ? CATEGORIAS.find(c => c.id === state.categoria)
         : null;
       if (cat && cat.sub.length > 0) {

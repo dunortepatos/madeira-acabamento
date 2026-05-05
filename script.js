@@ -15,7 +15,7 @@ const CATEGORIAS = [
   { id: 'FECHADURAS', label: 'Fechaduras', icon: '🔐', cls: 'cat-fechaduras', sub: ['3F', 'IMAB', 'TODAS'] },
   { id: 'LAMBRIL',    label: 'Lambril',    icon: '📐', cls: 'cat-lambril',    sub: [] },
   { id: 'PORTAIS',    label: 'Portais',    icon: '🏛️', cls: 'cat-portais',    sub: [] },
-  { id: 'PORTAS',     label: 'Portas',     icon: '🚪', cls: 'cat-portas',     sub: ['PRANCHETA', 'SÓLIDA', 'MACIÇA', 'TODAS'] },
+  { id: 'PORTAS',     label: 'Portas',     icon: '🚪', cls: 'cat-portas',     sub: ['MACIÇA', 'PRANCHETA', 'SÓLIDA', 'TODAS'] },
   { id: 'PUXADORES',  label: 'Puxadores',  icon: '🔩', cls: 'cat-puxadores',  sub: [] },
   { id: 'RIPADOS',    label: 'Ripados',    icon: '🪵', cls: 'cat-ripados',    sub: [] },
 ];
@@ -31,11 +31,23 @@ function formatBRL(v) {
   return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function sortByLabel(a, b) {
+  return a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' });
+}
+
+function sortSubcats(subcats) {
+  return [...subcats].sort((a, b) => {
+    if (a === 'TODAS') return 1;
+    if (b === 'TODAS') return -1;
+    return a.localeCompare(b, 'pt-BR', { sensitivity: 'base' });
+  });
+}
+
 // ── Build category cards ───────────────────────────────────────────────
 function buildCategories() {
   const grid = document.getElementById('catGrid');
   grid.innerHTML = '';
-  CATEGORIAS.forEach(cat => {
+  [...CATEGORIAS].sort(sortByLabel).forEach(cat => {
     const div = document.createElement('div');
     div.className = `cat-card ${cat.cls}`;
     div.innerHTML = `<span class="cat-icon">${cat.icon}</span><span class="cat-name">${cat.label}</span>`;
@@ -60,7 +72,7 @@ function buildSubcats(cat) {
   document.getElementById('subcatTitle').textContent = cat.label;
   const grid = document.getElementById('subcatGrid');
   grid.innerHTML = '';
-  cat.sub.forEach(sub => {
+  sortSubcats(cat.sub).forEach(sub => {
     const div = document.createElement('div');
     div.className = `subcat-card ${cat.cls}`;
     div.textContent = sub;
@@ -136,15 +148,24 @@ function renderTable() {
     return;
   }
 
-  tbody.innerHTML = list.map(p => `
+  tbody.innerHTML = list.map((p, index) => `
     <tr>
       <td class="td-code">${p.codigo}</td>
       <td class="td-name">${p.produto}</td>
-      <td class="td-price" onclick="openCalcModal(${JSON.stringify(p.produto)}, ${p.valor})" title="Clique para calcular">
-        ${formatBRL(p.valor)}
+      <td class="td-price">
+        <button class="price-button" type="button" data-index="${index}" title="Clique para calcular">
+          ${formatBRL(p.valor)}
+        </button>
       </td>
     </tr>
   `).join('');
+
+  tbody.querySelectorAll('.price-button').forEach(button => {
+    button.addEventListener('click', () => {
+      const product = list[Number(button.dataset.index)];
+      openCalcModal(product.produto, product.valor);
+    });
+  });
 }
 
 // ── Sort on header click ───────────────────────────────────────────────
