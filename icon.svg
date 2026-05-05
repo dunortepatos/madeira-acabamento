@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#1a1a2e"/>
+  <rect x="60" y="80" width="392" height="352" rx="20" fill="#c0392b"/>
+  <rect x="90" y="130" width="332" height="50" rx="8" fill="#fff" opacity=".15"/>
+  <rect x="90" y="200" width="120" height="30" rx="6" fill="#fff" opacity=".8"/>
+  <rect x="220" y="200" width="202" height="30" rx="6" fill="#fff" opacity=".8"/>
+  <rect x="90" y="245" width="120" height="30" rx="6" fill="#fff" opacity=".5"/>
+  <rect x="220" y="245" width="202" height="30" rx="6" fill="#fff" opacity=".5"/>
+  <rect x="90" y="290" width="120" height="30" rx="6" fill="#fff" opacity=".5"/>
+  <rect x="220" y="290" width="202" height="30" rx="6" fill="#fff" opacity=".5"/>
+  <rect x="90" y="335" width="120" height="30" rx="6" fill="#fff" opacity=".3"/>
+  <rect x="220" y="335" width="202" height="30" rx="6" fill="#fff" opacity=".3"/>
+  <text x="256" y="165" text-anchor="middle" fill="#fff" font-family="Arial" font-weight="bold" font-size="28" letter-spacing="2">PREÇOS</text>
+</svg>

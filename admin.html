@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#7d3c98" />
+  <title>Admin – Tabela de Preços</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ── Admin Header ─────────────────────────────────────────────────── -->
+  <header class="admin-header">
+    <h1>⚙️ Painel <span>Admin</span></h1>
+    <a href="index.html" class="btn btn-secondary">← Voltar ao catálogo</a>
+  </header>
+
+  <main class="container">
+
+    <!-- ── GitHub Config ─────────────────────────────────────────────── -->
+    <div class="gh-config-card" id="ghCard">
+      <button class="gh-config-toggle" onclick="toggleGHCard()" id="ghToggleBtn">
+        <span>🐙 Configuração GitHub</span>
+        <span id="ghStatus" class="gh-status gh-status--unconfigured">Não configurado</span>
+        <span class="gh-chevron" id="ghChevron">▼</span>
+      </button>
+      <div class="gh-config-body" id="ghBody">
+        <p class="gh-hint">
+          Configure uma vez para publicar alterações diretamente no GitHub Pages.
+          <a href="https://github.com/settings/tokens/new?scopes=repo&description=TabelaDePrecos" target="_blank" rel="noopener" class="gh-link">Gerar token aqui →</a>
+        </p>
+        <div class="form-grid" style="margin-top:14px">
+          <div class="form-group">
+            <label for="ghOwner">Usuário GitHub *</label>
+            <input id="ghOwner" type="text" placeholder="Ex: joaosilva" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label for="ghRepo">Repositório *</label>
+            <input id="ghRepo" type="text" placeholder="Ex: tabela-precos" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label for="ghBranch">Branch</label>
+            <input id="ghBranch" type="text" placeholder="main" autocomplete="off" />
+          </div>
+          <div class="form-group" style="grid-column:span 2">
+            <label for="ghToken">Personal Access Token *</label>
+            <input id="ghToken" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-actions" style="margin-top:14px">
+          <button class="btn btn-success" onclick="saveGHConfig()">💾 Salvar configuração</button>
+          <button class="btn btn-secondary" onclick="clearGHConfig()">🗑️ Limpar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Form ──────────────────────────────────────────────────────── -->
+    <div class="form-card">
+      <h2 id="formTitle">Novo Produto</h2>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="fCodigo">Código *</label>
+          <input id="fCodigo" type="text" placeholder="Ex: 974" autocomplete="off" />
+        </div>
+        <div class="form-group" style="grid-column: span 2">
+          <label for="fProduto">Produto *</label>
+          <input id="fProduto" type="text" placeholder="Ex: RIPADO GARAPA EXTRA 6,5 CM" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="fValor">Valor (R$) *</label>
+          <input id="fValor" type="text" inputmode="decimal" placeholder="Ex: 189,00" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label for="fCategoria">Categoria *</label>
+          <select id="fCategoria">
+            <option value="RIPADOS">RIPADOS</option>
+            <option value="ASSOALHOS">ASSOALHOS</option>
+            <option value="DECKS">DECKS</option>
+            <option value="LAMBRIL">LAMBRIL</option>
+            <option value="FECHADURAS">FECHADURAS</option>
+            <option value="PUXADORES">PUXADORES</option>
+            <option value="PORTAS">PORTAS</option>
+            <option value="PORTAIS">PORTAIS</option>
+            <option value="ALISARES">ALISARES</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="fSubcategoria">Subcategoria</label>
+          <select id="fSubcategoria">
+            <option value="">(nenhuma)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-success" onclick="saveProd()">💾 Salvar</button>
+        <button id="btnCancelEdit" class="btn btn-secondary" style="display:none" onclick="clearForm()">✕ Cancelar edição</button>
+      </div>
+    </div>
+
+    <!-- ── Toolbar ───────────────────────────────────────────────────── -->
+    <div class="admin-toolbar">
+      <div class="search-wrap" style="flex:1;min-width:200px;margin-bottom:0">
+        <span class="search-icon">🔍</span>
+        <input type="search" id="adminSearch" placeholder="Buscar produto…" autocomplete="off" />
+      </div>
+      <select id="filterCat" class="btn btn-secondary" style="padding:10px 14px;cursor:pointer;font-size:.9rem"></select>
+      <button class="btn btn-github" id="btnPublish" onclick="publishToGitHub()" title="Publicar no GitHub Pages">
+        🚀 Publicar
+      </button>
+      <button class="btn btn-secondary" onclick="exportJSON()" title="Exportar JSON">📤 Exportar</button>
+      <button class="btn btn-secondary" onclick="importJSON()" title="Importar JSON">📥 Importar</button>
+      <button class="btn btn-secondary" onclick="resetData()" title="Restaurar dados originais">🔄 Restaurar</button>
+    </div>
+
+    <p class="result-count" id="adminCount"></p>
+
+    <!-- ── Table ─────────────────────────────────────────────────────── -->
+    <div class="admin-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th id="ath-codigo"    onclick="onAdminSort('codigo')">Código <span class="sort-arrow">⇅</span></th>
+            <th id="ath-produto"   onclick="onAdminSort('produto')">Produto <span class="sort-arrow">⇅</span></th>
+            <th id="ath-valor"     onclick="onAdminSort('valor')" style="text-align:right">Valor <span class="sort-arrow">⇅</span></th>
+            <th id="ath-categoria" onclick="onAdminSort('categoria')">Categoria <span class="sort-arrow">⇅</span></th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="adminTbody"></tbody>
+      </table>
+    </div>
+
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="produtos.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
