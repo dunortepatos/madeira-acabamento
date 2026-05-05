@@ -1,5 +1,5 @@
 // Incrementado automaticamente a cada publicação via Admin → GitHub
-const PRODUTOS_VERSAO = 1777991937291;
+const PRODUTOS_VERSAO = 1777994014928;
 
 const PRODUTOS_INICIAIS = [
   {
