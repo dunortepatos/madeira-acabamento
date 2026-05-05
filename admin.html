@@ -97,6 +97,33 @@
       </div>
     </div>
 
+    <!-- ── Import Report ────────────────────────────────────────────── -->
+    <div class="form-card import-card">
+      <h2>Importar relatório</h2>
+      <div class="import-grid">
+        <div class="form-group import-file-group">
+          <label for="reportFile">Arquivo PDF ou Excel</label>
+          <input id="reportFile" type="file" accept=".pdf,.xlsx,.xls,.csv,.tsv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+        </div>
+        <div class="form-group">
+          <label for="importDefaultCat">Categoria para novos produtos</label>
+          <select id="importDefaultCat"></select>
+        </div>
+        <div class="form-group">
+          <label for="importDefaultSubcat">Subcategoria padrão</label>
+          <select id="importDefaultSubcat">
+            <option value="">(nenhuma)</option>
+          </select>
+        </div>
+      </div>
+      <p class="import-hint">O importador procura primeiro pelo código. Se encontrar, atualiza o preço. Se não encontrar, cadastra o produto usando a categoria do relatório ou a categoria padrão escolhida aqui.</p>
+      <div class="form-actions">
+        <button class="btn btn-success" onclick="importReport()">📄 Importar relatório</button>
+        <button class="btn btn-secondary" onclick="clearImportPreview()">Limpar prévia</button>
+      </div>
+      <div id="importPreview" class="import-preview" hidden></div>
+    </div>
+
     <!-- ── Toolbar ───────────────────────────────────────────────────── -->
     <div class="admin-toolbar">
       <div class="search-wrap" style="flex:1;min-width:200px;margin-bottom:0">
@@ -135,6 +162,8 @@
   <div id="toast" class="toast"></div>
 
   <script src="produtos.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="admin.js"></script>
 </body>
 </html>

@@ -3,6 +3,7 @@ let editingId = null;
 let adminSortCol = 'produto';
 let adminSortDir = 1;
 let adminQuery = '';
+let importPlan = null;
 
 const CATEGORIAS_LIST = ['ALISARES','ASSOALHOS','DECKS','FECHADURAS','LAMBRIL','PORTAIS','PORTAS','PUXADORES','RIPADOS'];
 const SUBCATS = {
@@ -24,6 +25,16 @@ function formatBRL(v) {
   return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function escapeHTML(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[char]));
+}
+
 // ── Subcategory options ────────────────────────────────────────────────
 function updateSubcatOptions() {
   const cat = document.getElementById('fCategoria').value;
@@ -39,6 +50,25 @@ function populateCatSelect(id) {
   sel.innerHTML = '<option value="">Todas</option>' +
     CATEGORIAS_LIST.map(c => `<option value="${c}">${c}</option>`).join('');
   if (cur) sel.value = cur;
+}
+
+function populateImportCatSelect() {
+  const sel = document.getElementById('importDefaultCat');
+  if (!sel) return;
+  const cur = sel.value || 'RIPADOS';
+  sel.innerHTML = CATEGORIAS_LIST.map(c => `<option value="${c}">${c}</option>`).join('');
+  sel.value = CATEGORIAS_LIST.includes(cur) ? cur : 'RIPADOS';
+  updateImportSubcatOptions();
+}
+
+function updateImportSubcatOptions() {
+  const catSel = document.getElementById('importDefaultCat');
+  const subSel = document.getElementById('importDefaultSubcat');
+  if (!catSel || !subSel) return;
+  const cur = subSel.value;
+  const opts = SUBCATS[catSel.value] || [''];
+  subSel.innerHTML = opts.map(s => `<option value="${s}">${s || '(nenhuma)'}</option>`).join('');
+  if (opts.includes(cur)) subSel.value = cur;
 }
 
 // ── Get filtered + sorted admin list ──────────────────────────────────
@@ -90,15 +120,15 @@ function renderAdminTable() {
   }
 
   tbody.innerHTML = list.map(p => `
-    <tr data-id="${p.id}">
-      <td class="td-code">${p.codigo}</td>
-      <td class="td-name">${p.produto}</td>
+    <tr data-id="${escapeHTML(p.id)}">
+      <td class="td-code">${escapeHTML(p.codigo)}</td>
+      <td class="td-name">${escapeHTML(p.produto)}</td>
       <td class="td-price">${formatBRL(p.valor)}</td>
-      <td style="color:var(--text-muted);font-size:.8rem">${p.categoria}${p.subcategoria ? ' › '+p.subcategoria : ''}</td>
+      <td style="color:var(--text-muted);font-size:.8rem">${escapeHTML(p.categoria)}${p.subcategoria ? ' › '+escapeHTML(p.subcategoria) : ''}</td>
       <td>
         <div class="td-actions">
-          <button class="btn btn-secondary btn-sm" onclick="editProd('${p.id}')">✏️ Editar</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteProd('${p.id}')">🗑️</button>
+          <button class="btn btn-secondary btn-sm" onclick="editProd('${escapeHTML(p.id)}')">✏️ Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteProd('${escapeHTML(p.id)}')">🗑️</button>
         </div>
       </td>
     </tr>
@@ -219,6 +249,326 @@ function importJSON() {
     reader.readAsText(file);
   };
   input.click();
+}
+
+// ── Import report (PDF / Excel) ───────────────────────────────────────
+function normalizeText(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+function normalizeKey(value) {
+  return normalizeText(value).toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function parseBRNumber(value) {
+  let text = String(value ?? '').trim();
+  if (!text) return NaN;
+  text = text.replace(/R\$/gi, '').replace(/\s/g, '');
+  text = text.replace(/[^\d,.-]/g, '');
+  const lastComma = text.lastIndexOf(',');
+  const lastDot = text.lastIndexOf('.');
+  if (lastComma > lastDot) text = text.replace(/\./g, '').replace(',', '.');
+  else if (lastDot > lastComma) text = text.replace(/,/g, '');
+  const parsed = Number.parseFloat(text);
+  return Number.isFinite(parsed) ? Math.round(parsed * 100) / 100 : NaN;
+}
+
+function normalizeCategory(value, fallback) {
+  const key = normalizeKey(value);
+  const found = CATEGORIAS_LIST.find(cat => normalizeKey(cat) === key);
+  return found || fallback || 'RIPADOS';
+}
+
+function normalizeSubcategory(value, categoria, fallback = '') {
+  const opts = SUBCATS[categoria] || [''];
+  const key = normalizeKey(value);
+  const found = opts.find(opt => normalizeKey(opt) === key);
+  return found || fallback || '';
+}
+
+function findHeaderMap(rows) {
+  let best = null;
+  rows.slice(0, 25).forEach((row, rowIndex) => {
+    const map = {};
+    row.forEach((cell, colIndex) => {
+      const key = normalizeKey(cell);
+      if (!key) return;
+      if (['codigo', 'cod', 'codproduto', 'codigoproduto', 'referencia', 'ref'].includes(key)) map.codigo = colIndex;
+      if (['produto', 'descricao', 'descricaoproduto', 'item', 'nome', 'material'].includes(key)) map.produto = colIndex;
+      if (['valor', 'preco', 'precovenda', 'precoavista', 'vlr', 'valorunitario', 'preco unitario'.replace(/ /g, '')].includes(key)) map.valor = colIndex;
+      if (['categoria', 'grupo', 'familia', 'linha'].includes(key)) map.categoria = colIndex;
+      if (['subcategoria', 'subgrupo', 'sub', 'marca'].includes(key)) map.subcategoria = colIndex;
+    });
+    const score = Number.isInteger(map.codigo) + Number.isInteger(map.produto) + Number.isInteger(map.valor) * 2;
+    if (score >= 3 && (!best || score > best.score)) best = { rowIndex, map, score };
+  });
+  return best;
+}
+
+function extractRecordFromLine(text, sourceRow, defaultCategoria, defaultSubcategoria) {
+  const line = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (!line) return null;
+  const priceMatches = [...line.matchAll(/(?:R\$\s*)?-?\d{1,3}(?:\.\d{3})*,\d{2}|(?:R\$\s*)?-?\d+,\d{2}|(?:R\$\s*)?-?\d+\.\d{2}/g)];
+  if (priceMatches.length === 0) return null;
+  const priceMatch = priceMatches[priceMatches.length - 1];
+  const valor = parseBRNumber(priceMatch[0]);
+  if (!Number.isFinite(valor)) return null;
+
+  const beforePrice = line.slice(0, priceMatch.index).trim();
+  const codeMatch = beforePrice.match(/^\D*(\d{2,10})\b/) || beforePrice.match(/\b(\d{2,10})\b/);
+  if (!codeMatch) return null;
+
+  const codigo = codeMatch[1];
+  const productStart = (codeMatch.index || 0) + codeMatch[0].length;
+  const produto = beforePrice
+    .slice(productStart)
+    .replace(/^[\s\-–—|;:]+/, '')
+    .trim();
+
+  if (!produto) return null;
+  return { codigo, produto, valor, categoria: defaultCategoria, subcategoria: defaultSubcategoria, sourceRow };
+}
+
+function recordsFromRows(rows, defaultCategoria, defaultSubcategoria) {
+  const header = findHeaderMap(rows);
+  const records = [];
+
+  if (header) {
+    rows.slice(header.rowIndex + 1).forEach((row, idx) => {
+      const codigo = String(row[header.map.codigo] ?? '').trim();
+      const produto = String(row[header.map.produto] ?? '').trim();
+      const valor = parseBRNumber(row[header.map.valor]);
+      if (!codigo || !produto || !Number.isFinite(valor)) return;
+      const categoriaRaw = Number.isInteger(header.map.categoria) ? row[header.map.categoria] : '';
+      const categoria = normalizeCategory(categoriaRaw, defaultCategoria);
+      const subRaw = Number.isInteger(header.map.subcategoria) ? row[header.map.subcategoria] : '';
+      const subcategoria = normalizeSubcategory(subRaw, categoria, defaultSubcategoria);
+      records.push({ codigo, produto, valor, categoria, subcategoria, sourceRow: header.rowIndex + idx + 2 });
+    });
+  }
+
+  if (records.length > 0) return records;
+
+  rows.forEach((row, idx) => {
+    const record = extractRecordFromLine(row.join(' '), idx + 1, defaultCategoria, defaultSubcategoria);
+    if (record) records.push(record);
+  });
+  return records;
+}
+
+async function parseExcelReport(file, defaultCategoria, defaultSubcategoria) {
+  if (!window.XLSX) throw new Error('Biblioteca de Excel não carregou. Verifique a internet e recarregue a página.');
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const rows = workbook.SheetNames.flatMap(sheetName => {
+    const sheet = workbook.Sheets[sheetName];
+    return XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
+  });
+  return recordsFromRows(rows, defaultCategoria, defaultSubcategoria);
+}
+
+async function parseDelimitedReport(file, defaultCategoria, defaultSubcategoria) {
+  const text = await file.text();
+  const separator = file.name.toLowerCase().endsWith('.tsv') ? '\t' : ';';
+  const rows = text.split(/\r?\n/).map(line => {
+    const parts = line.includes(separator) ? line.split(separator) : line.split(',');
+    return parts.map(part => part.trim());
+  });
+  return recordsFromRows(rows, defaultCategoria, defaultSubcategoria);
+}
+
+async function parsePdfReport(file, defaultCategoria, defaultSubcategoria) {
+  if (!window.pdfjsLib) throw new Error('Biblioteca de PDF não carregou. Verifique a internet e recarregue a página.');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  const rows = [];
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
+    const page = await pdf.getPage(pageNum);
+    const content = await page.getTextContent();
+    const lines = new Map();
+    content.items.forEach(item => {
+      const y = Math.round(item.transform[5] / 3) * 3;
+      const x = item.transform[4];
+      if (!lines.has(y)) lines.set(y, []);
+      lines.get(y).push({ x, text: item.str });
+    });
+    [...lines.entries()]
+      .sort((a, b) => b[0] - a[0])
+      .forEach(([, items]) => {
+        const line = items.sort((a, b) => a.x - b.x).map(item => item.text).join(' ').trim();
+        if (line) rows.push([line]);
+      });
+  }
+
+  return recordsFromRows(rows, defaultCategoria, defaultSubcategoria);
+}
+
+function buildImportPlan(records) {
+  const current = getProdutos();
+  const byCode = new Map(current.map((p, index) => [String(p.codigo).trim(), { product: p, index }]));
+  const seen = new Set();
+  const changes = [];
+
+  records.forEach(record => {
+    const codigo = String(record.codigo).trim();
+    if (!codigo || seen.has(codigo)) return;
+    seen.add(codigo);
+    const found = byCode.get(codigo);
+    if (found) {
+      changes.push({
+        type: 'update',
+        index: found.index,
+        before: found.product,
+        after: { ...found.product, valor: record.valor },
+        record,
+      });
+    } else {
+      changes.push({
+        type: 'new',
+        after: {
+          id: 'p_imp_' + Date.now() + '_' + changes.length,
+          codigo,
+          produto: record.produto,
+          valor: record.valor,
+          categoria: record.categoria,
+          subcategoria: record.subcategoria,
+        },
+        record,
+      });
+    }
+  });
+
+  return { records, changes };
+}
+
+function clearImportPreview() {
+  importPlan = null;
+  const preview = document.getElementById('importPreview');
+  if (preview) {
+    preview.hidden = true;
+    preview.innerHTML = '';
+  }
+  const input = document.getElementById('reportFile');
+  if (input) input.value = '';
+}
+
+function renderImportPreview(plan, fileName) {
+  const preview = document.getElementById('importPreview');
+  const updates = plan.changes.filter(c => c.type === 'update');
+  const news = plan.changes.filter(c => c.type === 'new');
+  const ignored = Math.max(0, plan.records.length - plan.changes.length);
+  const sample = plan.changes.slice(0, 12);
+
+  preview.hidden = false;
+  preview.innerHTML = `
+    <div class="import-summary">
+      <div class="import-summary-item"><strong>${plan.records.length}</strong><span>Lidos</span></div>
+      <div class="import-summary-item"><strong>${updates.length}</strong><span>Atualizar</span></div>
+      <div class="import-summary-item"><strong>${news.length}</strong><span>Cadastrar</span></div>
+      <div class="import-summary-item"><strong>${ignored}</strong><span>Ignorados</span></div>
+    </div>
+    <div class="import-preview-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Código</th>
+            <th>Produto</th>
+            <th style="text-align:right">Valor</th>
+            <th>Categoria</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sample.map(change => `
+            <tr>
+              <td><span class="import-status import-status--${change.type}">${change.type === 'update' ? 'Atualizar' : 'Novo'}</span></td>
+              <td class="td-code">${escapeHTML(change.after.codigo)}</td>
+              <td class="td-name">${escapeHTML(change.after.produto)}</td>
+              <td class="td-price">${formatBRL(change.after.valor)}</td>
+              <td>${escapeHTML(change.after.categoria)}${change.after.subcategoria ? ' › ' + escapeHTML(change.after.subcategoria) : ''}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="import-preview-actions">
+      <button class="btn btn-secondary" onclick="clearImportPreview()">Cancelar</button>
+      <button class="btn btn-success" onclick="applyImportReport()">Aplicar ${plan.changes.length} alterações</button>
+    </div>
+  `;
+
+  toast(`Prévia pronta: ${fileName}`);
+}
+
+async function importReport() {
+  const input = document.getElementById('reportFile');
+  const file = input.files && input.files[0];
+  if (!file) {
+    toast('Selecione um arquivo PDF ou Excel.', true);
+    return;
+  }
+
+  const defaultCategoria = document.getElementById('importDefaultCat').value || 'RIPADOS';
+  const defaultSubcategoria = document.getElementById('importDefaultSubcat').value || '';
+  const name = file.name.toLowerCase();
+
+  try {
+    toast('Lendo relatório...');
+    let records;
+    if (name.endsWith('.pdf')) records = await parsePdfReport(file, defaultCategoria, defaultSubcategoria);
+    else if (name.endsWith('.xlsx') || name.endsWith('.xls')) records = await parseExcelReport(file, defaultCategoria, defaultSubcategoria);
+    else if (name.endsWith('.csv') || name.endsWith('.tsv')) records = await parseDelimitedReport(file, defaultCategoria, defaultSubcategoria);
+    else throw new Error('Formato não suportado. Use PDF, Excel, CSV ou TSV.');
+
+    if (records.length === 0) {
+      clearImportPreview();
+      toast('Não encontrei produtos válidos no relatório.', true);
+      return;
+    }
+
+    importPlan = buildImportPlan(records);
+    if (importPlan.changes.length === 0) {
+      clearImportPreview();
+      toast('Nada para atualizar ou cadastrar.', true);
+      return;
+    }
+    renderImportPreview(importPlan, file.name);
+  } catch (err) {
+    console.error(err);
+    toast('Erro ao importar: ' + err.message, true);
+  }
+}
+
+function applyImportReport() {
+  if (!importPlan || importPlan.changes.length === 0) {
+    toast('Nenhuma prévia para aplicar.', true);
+    return;
+  }
+
+  const lista = getProdutos();
+  let updated = 0;
+  let created = 0;
+
+  importPlan.changes.forEach(change => {
+    if (change.type === 'update' && lista[change.index]) {
+      lista[change.index] = change.after;
+      updated += 1;
+    }
+    if (change.type === 'new') {
+      lista.push(change.after);
+      created += 1;
+    }
+  });
+
+  setProdutos(lista);
+  renderAdminTable();
+  clearImportPreview();
+  toast(`Importação aplicada: ${updated} atualizados, ${created} cadastrados.`);
 }
 
 // ── Reset to initial data ─────────────────────────────────────────────
@@ -427,6 +777,7 @@ async function publishToGitHub() {
 ensureIds();
 initGHCard();
 populateCatSelect('filterCat');
+populateImportCatSelect();
 updateSubcatOptions();
 renderAdminTable();
 
@@ -437,3 +788,4 @@ document.getElementById('adminSearch').addEventListener('input', e => {
 
 document.getElementById('filterCat').addEventListener('change', renderAdminTable);
 document.getElementById('fCategoria').addEventListener('change', updateSubcatOptions);
+document.getElementById('importDefaultCat').addEventListener('change', updateImportSubcatOptions);
