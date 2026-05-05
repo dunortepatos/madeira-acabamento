@@ -53,16 +53,30 @@ function getCustomCategories() {
   }
 }
 
+function getHiddenCategories() {
+  try {
+    const data = JSON.parse(localStorage.getItem('hidden_categories') || '[]');
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHiddenCategories(categories) {
+  localStorage.setItem('hidden_categories', JSON.stringify([...new Set(categories)].sort()));
+}
+
 function saveCustomCategories(categories) {
   localStorage.setItem('custom_categories', JSON.stringify([...new Set(categories)].sort()));
 }
 
 function refreshCategoryList() {
+  const hidden = new Set(getHiddenCategories());
   const productCategories = getProdutos()
     .map(p => String(p.categoria || '').trim().toUpperCase())
     .filter(Boolean);
   CATEGORIAS_LIST = [...new Set([
-    ...BASE_CATEGORIAS_LIST,
+    ...BASE_CATEGORIAS_LIST.filter(cat => !hidden.has(cat)),
     ...getCustomCategories(),
     ...productCategories,
   ])].sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
@@ -71,12 +85,17 @@ function refreshCategoryList() {
 function rememberCategory(categoria) {
   const id = categoryIdFromName(categoria);
   if (!id || CATEGORIAS_LIST.includes(id)) return id;
+  saveHiddenCategories(getHiddenCategories().filter(cat => cat !== id));
   const custom = getCustomCategories();
   custom.push(id);
   saveCustomCategories(custom);
   refreshCategoryList();
   populateAllCategorySelects(id);
   return id;
+}
+
+function isBaseCategory(categoria) {
+  return BASE_CATEGORIAS_LIST.includes(categoria);
 }
 
 // ── Subcategory options ────────────────────────────────────────────────
@@ -136,7 +155,79 @@ function createCategory() {
   }
   document.getElementById('fCategoria').value = categoria;
   updateSubcatOptions();
+  renderCategoryList();
   toast('Categoria criada: ' + categoria);
+}
+
+function renameCategory(oldCategory) {
+  const current = String(oldCategory || '').toUpperCase();
+  const nextName = prompt('Novo nome da categoria:', current);
+  if (!nextName) return;
+  const next = categoryIdFromName(nextName);
+  if (!next) {
+    toast('Categoria inválida.', true);
+    return;
+  }
+  if (next !== current && CATEGORIAS_LIST.includes(next)) {
+    toast('Já existe uma categoria com esse nome.', true);
+    return;
+  }
+
+  const lista = getProdutos().map(p => p.categoria === current ? { ...p, categoria: next } : p);
+  const custom = getCustomCategories().filter(cat => cat !== current);
+  if (!isBaseCategory(next)) custom.push(next);
+  if (isBaseCategory(current)) saveHiddenCategories([...getHiddenCategories(), current]);
+  saveCustomCategories(custom);
+  setProdutos(lista);
+  populateAllCategorySelects(next);
+  renderCategoryList();
+  renderAdminTable();
+  toast(`Categoria renomeada: ${current} → ${next}`);
+}
+
+function deleteCategory(categoria) {
+  const target = String(categoria || '').toUpperCase();
+  if (target === 'OUTROS') {
+    toast('A categoria OUTROS não pode ser excluída.', true);
+    return;
+  }
+  const total = getProdutos().filter(p => p.categoria === target).length;
+  const msg = total > 0
+    ? `Excluir ${target}? ${total} produto(s) serão movidos para OUTROS.`
+    : `Excluir ${target}?`;
+  if (!confirm(msg)) return;
+
+  const lista = getProdutos().map(p => p.categoria === target ? { ...p, categoria: 'OUTROS', subcategoria: '' } : p);
+  saveCustomCategories(getCustomCategories().filter(cat => cat !== target));
+  if (isBaseCategory(target)) saveHiddenCategories([...getHiddenCategories(), target]);
+  setProdutos(lista);
+  populateAllCategorySelects('OUTROS');
+  renderCategoryList();
+  renderAdminTable();
+  toast('Categoria excluída. Produtos movidos para OUTROS.');
+}
+
+function renderCategoryList() {
+  const el = document.getElementById('categoryList');
+  if (!el) return;
+  refreshCategoryList();
+  const counts = getProdutos().reduce((acc, p) => {
+    const cat = String(p.categoria || 'OUTROS').toUpperCase();
+    acc[cat] = (acc[cat] || 0) + 1;
+    return acc;
+  }, {});
+  el.innerHTML = CATEGORIAS_LIST.map(cat => `
+    <div class="category-row">
+      <div>
+        <strong>${escapeHTML(cat)}</strong>
+        <span>${counts[cat] || 0} produto${counts[cat] === 1 ? '' : 's'}</span>
+      </div>
+      <div class="category-actions">
+        <button class="btn btn-secondary btn-sm" onclick="renameCategory('${escapeHTML(cat)}')">Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteCategory('${escapeHTML(cat)}')" ${cat === 'OUTROS' ? 'disabled' : ''}>Excluir</button>
+      </div>
+    </div>
+  `).join('');
 }
 
 // ── Get filtered + sorted admin list ──────────────────────────────────
@@ -254,6 +345,7 @@ function saveProd() {
   refreshCategoryList();
   clearForm();
   renderAdminTable();
+  renderCategoryList();
 }
 
 // ── Edit ──────────────────────────────────────────────────────────────
@@ -278,6 +370,8 @@ function deleteProd(id) {
   if (!confirm('Excluir este produto?')) return;
   const lista = getProdutos().filter(p => p.id !== id);
   setProdutos(lista);
+  populateAllCategorySelects();
+  renderCategoryList();
   toast('Produto excluído.');
   renderAdminTable();
 }
@@ -313,6 +407,7 @@ function importJSON() {
         data.forEach(p => { p.categoria = rememberCategory(p.categoria || 'OUTROS'); });
         setProdutos(data);
         populateAllCategorySelects();
+        renderCategoryList();
         renderAdminTable();
         toast('Importado: ' + data.length + ' produtos.');
       } catch {
@@ -360,16 +455,16 @@ function normalizeCategory(value, fallback) {
 function inferKnownCategory(produto) {
   const text = ' ' + normalizeText(produto).toLowerCase().replace(/[^a-z0-9]+/g, ' ') + ' ';
   const rules = [
+    { id: 'OUTROS',     test: /\bcilindros?\b|\bkit\s+de\s+correr\b|\bmaderites?\b|\bpivos?\b|\bpregos?\b|\brodas?\b|\btaboas?\b|\btabuas?\b|\btaboes?\b|\btrincos?\b/ },
     { id: 'PORTAIS',    test: /\bportais?\b|\bportal\b/ },
     { id: 'PORTAS',     test: /\bportas?\b|\bpranchetas?\b|\bmacicas?\b|\bsolidas?\b/ },
     { id: 'ASSOALHOS',  test: /\ba+s+o+a+l+h?o?s?\b|\basoalhos?\b|\bassoalhos?\b/ },
-    { id: 'ALISARES',   test: /\balisares?\b|\balizares?\b|\bguarnicoes?\b|\bguarnicao\b/ },
+    { id: 'ALISARES',   test: /\balisares?\b|\balizares?\b|\balizar(es)?\b|\balisar(es)?\b|\bguarnicoes?\b|\bguarnicao\b/ },
     { id: 'DECKS',      test: /\bdecks?\b/ },
     { id: 'FECHADURAS', test: /\bfechaduras?\b|\bfeixos?\b|\bfecho\b/ },
     { id: 'LAMBRIL',    test: /\blambris?\b|\blambril\b/ },
-    { id: 'PUXADORES',  test: /\bpuxadores?\b/ },
+    { id: 'PUXADORES',  test: /\bpuxador(es)?\b|\bpuxadores?\b/ },
     { id: 'RIPADOS',    test: /\bripados?\b/ },
-    { id: 'TÁBOAS',     test: /\btaboas?\b|\btabuas?\b|\btaboes?\b/ },
   ];
   const found = rules.find(rule => rule.test.test(text));
   return found ? found.id : '';
@@ -715,6 +810,7 @@ function applyImportReport() {
   setProdutos(lista);
   refreshCategoryList();
   populateAllCategorySelects();
+  renderCategoryList();
   renderAdminTable();
   clearImportPreview();
   toast(`Importação aplicada: ${updated} atualizados, ${created} cadastrados.`);
@@ -727,6 +823,7 @@ function resetData() {
   getProdutos(); // re-seeds from PRODUTOS_INICIAIS
   refreshCategoryList();
   populateAllCategorySelects();
+  renderCategoryList();
   renderAdminTable();
   toast('Dados restaurados!');
 }
@@ -736,6 +833,25 @@ function onAdminSort(col) {
   if (adminSortCol === col) adminSortDir *= -1;
   else { adminSortCol = col; adminSortDir = 1; }
   renderAdminTable();
+}
+
+function normalizeStoredCategories() {
+  const lista = getProdutos();
+  let changed = false;
+  const normalized = lista.map(produto => {
+    const inferred = inferKnownCategory(produto.produto);
+    if (inferred && produto.categoria !== inferred) {
+      changed = true;
+      return { ...produto, categoria: inferred, subcategoria: '' };
+    }
+    return produto;
+  });
+
+  if (changed) setProdutos(normalized);
+
+  const used = new Set(normalized.map(p => String(p.categoria || '').toUpperCase()));
+  const custom = getCustomCategories().filter(cat => used.has(cat) && !isBaseCategory(cat));
+  saveCustomCategories(custom);
 }
 
 // ── Ensure all products have IDs ──────────────────────────────────────
@@ -926,11 +1042,13 @@ async function publishToGitHub() {
 
 // ── Init ──────────────────────────────────────────────────────────────
 ensureIds();
+normalizeStoredCategories();
 initGHCard();
 refreshCategoryList();
 populateAllCategorySelects('RIPADOS');
 updateSubcatOptions();
 renderAdminTable();
+renderCategoryList();
 
 document.getElementById('adminSearch').addEventListener('input', e => {
   adminQuery = e.target.value;

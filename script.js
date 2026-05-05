@@ -64,12 +64,14 @@ function classFromCategory(id) {
 }
 
 function getCatalogCategories() {
-  const map = new Map(BASE_CATEGORIAS.map(cat => [cat.id, { ...cat }]));
+  const map = new Map();
+  const baseMap = new Map(BASE_CATEGORIAS.map(cat => [cat.id, { ...cat }]));
   getProdutos().forEach(produto => {
     const id = String(produto.categoria || 'OUTROS').trim().toUpperCase();
     if (!id) return;
     if (!map.has(id)) {
-      map.set(id, {
+      const base = baseMap.get(id);
+      map.set(id, base ? { ...base } : {
         id,
         label: categoryLabelFromId(id),
         icon: '📦',
@@ -78,6 +80,7 @@ function getCatalogCategories() {
       });
     }
   });
+  if (!map.has('OUTROS')) map.set('OUTROS', { ...baseMap.get('OUTROS') });
   return [...map.values()];
 }
 
