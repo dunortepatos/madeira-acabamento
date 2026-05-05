@@ -104,8 +104,9 @@
   <script>
     // Wire back button: go to subcat if has subcategories, else home
     document.getElementById('btnBackProd').addEventListener('click', () => {
-      const cat = typeof CATEGORIAS !== 'undefined'
-        ? CATEGORIAS.find(c => c.id === state.categoria)
+      const categories = typeof getCatalogCategories === 'function' ? getCatalogCategories() : CATEGORIAS;
+      const cat = typeof categories !== 'undefined'
+        ? categories.find(c => c.id === state.categoria)
         : null;
       if (cat && cat.sub.length > 0) {
         showScreen('screen-subcat');

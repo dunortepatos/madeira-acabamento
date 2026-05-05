@@ -8,17 +8,19 @@ const state = {
 };
 
 // ── Category config (ordem alfabética) ────────────────────────────────
-const CATEGORIAS = [
+const BASE_CATEGORIAS = [
   { id: 'ALISARES',   label: 'Alisares',   icon: '📏', cls: 'cat-alisares',   sub: [] },
   { id: 'ASSOALHOS',  label: 'Assoalhos',  icon: '🏠', cls: 'cat-assoalhos',  sub: [] },
   { id: 'DECKS',      label: 'Decks',      icon: '🌿', cls: 'cat-decks',      sub: [] },
   { id: 'FECHADURAS', label: 'Fechaduras', icon: '🔐', cls: 'cat-fechaduras', sub: ['3F', 'IMAB', 'TODAS'] },
   { id: 'LAMBRIL',    label: 'Lambril',    icon: '📐', cls: 'cat-lambril',    sub: [] },
+  { id: 'OUTROS',     label: 'Outros',     icon: '📦', cls: 'cat-outros',     sub: [] },
   { id: 'PORTAIS',    label: 'Portais',    icon: '🏛️', cls: 'cat-portais',    sub: [] },
   { id: 'PORTAS',     label: 'Portas',     icon: '🚪', cls: 'cat-portas',     sub: ['MACIÇA', 'PRANCHETA', 'SÓLIDA', 'TODAS'] },
   { id: 'PUXADORES',  label: 'Puxadores',  icon: '🔩', cls: 'cat-puxadores',  sub: [] },
   { id: 'RIPADOS',    label: 'Ripados',    icon: '🪵', cls: 'cat-ripados',    sub: [] },
 ];
+const CATEGORIAS = BASE_CATEGORIAS;
 
 // ── Screens ────────────────────────────────────────────────────────────
 function showScreen(id) {
@@ -43,11 +45,47 @@ function sortSubcats(subcats) {
   });
 }
 
+function categoryLabelFromId(id) {
+  return String(id || '')
+    .toLowerCase()
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function classFromCategory(id) {
+  return 'cat-' + String(id || 'outros')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function getCatalogCategories() {
+  const map = new Map(BASE_CATEGORIAS.map(cat => [cat.id, { ...cat }]));
+  getProdutos().forEach(produto => {
+    const id = String(produto.categoria || 'OUTROS').trim().toUpperCase();
+    if (!id) return;
+    if (!map.has(id)) {
+      map.set(id, {
+        id,
+        label: categoryLabelFromId(id),
+        icon: '📦',
+        cls: classFromCategory(id),
+        sub: [],
+      });
+    }
+  });
+  return [...map.values()];
+}
+
 // ── Build category cards ───────────────────────────────────────────────
 function buildCategories() {
   const grid = document.getElementById('catGrid');
   grid.innerHTML = '';
-  [...CATEGORIAS].sort(sortByLabel).forEach(cat => {
+  getCatalogCategories().sort(sortByLabel).forEach(cat => {
     const div = document.createElement('div');
     div.className = `cat-card ${cat.cls}`;
     div.innerHTML = `<span class="cat-icon">${cat.icon}</span><span class="cat-name">${cat.label}</span>`;
@@ -93,7 +131,7 @@ function openProducts(categoria, subcategoria) {
   state.sortDir = 1;
   document.getElementById('searchInput').value = '';
 
-  const cat = CATEGORIAS.find(c => c.id === categoria);
+  const cat = getCatalogCategories().find(c => c.id === categoria);
   let title = cat ? cat.label.toUpperCase() : categoria;
   if (subcategoria) title += ' › ' + subcategoria;
   document.getElementById('prodTitle').innerHTML = `<strong>${title}</strong>`;

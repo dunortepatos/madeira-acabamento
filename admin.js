@@ -5,7 +5,8 @@ let adminSortDir = 1;
 let adminQuery = '';
 let importPlan = null;
 
-const CATEGORIAS_LIST = ['ALISARES','ASSOALHOS','DECKS','FECHADURAS','LAMBRIL','PORTAIS','PORTAS','PUXADORES','RIPADOS'];
+const BASE_CATEGORIAS_LIST = ['ALISARES','ASSOALHOS','DECKS','FECHADURAS','LAMBRIL','OUTROS','PORTAIS','PORTAS','PUXADORES','RIPADOS'];
+let CATEGORIAS_LIST = [...BASE_CATEGORIAS_LIST];
 const SUBCATS = {
   FECHADURAS: ['', '3F', 'IMAB'],
   PORTAS: ['', 'PRANCHETA', 'SÓLIDA', 'MACIÇA'],
@@ -35,27 +36,81 @@ function escapeHTML(value) {
   }[char]));
 }
 
+function categoryIdFromName(name) {
+  return String(name || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9À-Ú\s_-]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getCustomCategories() {
+  try {
+    const data = JSON.parse(localStorage.getItem('custom_categories') || '[]');
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomCategories(categories) {
+  localStorage.setItem('custom_categories', JSON.stringify([...new Set(categories)].sort()));
+}
+
+function refreshCategoryList() {
+  const productCategories = getProdutos()
+    .map(p => String(p.categoria || '').trim().toUpperCase())
+    .filter(Boolean);
+  CATEGORIAS_LIST = [...new Set([
+    ...BASE_CATEGORIAS_LIST,
+    ...getCustomCategories(),
+    ...productCategories,
+  ])].sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+}
+
+function rememberCategory(categoria) {
+  const id = categoryIdFromName(categoria);
+  if (!id || CATEGORIAS_LIST.includes(id)) return id;
+  const custom = getCustomCategories();
+  custom.push(id);
+  saveCustomCategories(custom);
+  refreshCategoryList();
+  populateAllCategorySelects(id);
+  return id;
+}
+
 // ── Subcategory options ────────────────────────────────────────────────
 function updateSubcatOptions() {
   const cat = document.getElementById('fCategoria').value;
   const sel = document.getElementById('fSubcategoria');
   const opts = SUBCATS[cat] || [''];
+  const cur = sel.value;
   sel.innerHTML = opts.map(s => `<option value="${s}">${s || '(nenhuma)'}</option>`).join('');
+  if (opts.includes(cur)) sel.value = cur;
 }
 
 // ── Populate category selects ──────────────────────────────────────────
-function populateCatSelect(id) {
+function populateCatSelect(id, includeAll = true, selected = '') {
   const sel = document.getElementById(id);
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">Todas</option>' +
+  if (!sel) return;
+  const cur = selected || sel.value;
+  sel.innerHTML = (includeAll ? '<option value="">Todas</option>' : '') +
     CATEGORIAS_LIST.map(c => `<option value="${c}">${c}</option>`).join('');
   if (cur) sel.value = cur;
 }
 
-function populateImportCatSelect() {
+function populateAllCategorySelects(selected = '') {
+  refreshCategoryList();
+  populateCatSelect('fCategoria', false, selected || document.getElementById('fCategoria')?.value || 'RIPADOS');
+  populateCatSelect('filterCat', true);
+  populateImportCatSelect(selected);
+  updateSubcatOptions();
+}
+
+function populateImportCatSelect(selected = '') {
   const sel = document.getElementById('importDefaultCat');
   if (!sel) return;
-  const cur = sel.value || 'RIPADOS';
+  const cur = selected || sel.value || 'RIPADOS';
   sel.innerHTML = CATEGORIAS_LIST.map(c => `<option value="${c}">${c}</option>`).join('');
   sel.value = CATEGORIAS_LIST.includes(cur) ? cur : 'RIPADOS';
   updateImportSubcatOptions();
@@ -69,6 +124,19 @@ function updateImportSubcatOptions() {
   const opts = SUBCATS[catSel.value] || [''];
   subSel.innerHTML = opts.map(s => `<option value="${s}">${s || '(nenhuma)'}</option>`).join('');
   if (opts.includes(cur)) subSel.value = cur;
+}
+
+function createCategory() {
+  const name = prompt('Nome da nova categoria:');
+  if (!name) return;
+  const categoria = rememberCategory(name);
+  if (!categoria) {
+    toast('Categoria inválida.', true);
+    return;
+  }
+  document.getElementById('fCategoria').value = categoria;
+  updateSubcatOptions();
+  toast('Categoria criada: ' + categoria);
 }
 
 // ── Get filtered + sorted admin list ──────────────────────────────────
@@ -142,6 +210,7 @@ function clearForm() {
   document.getElementById('fCodigo').value = '';
   document.getElementById('fProduto').value = '';
   document.getElementById('fValor').value = '';
+  populateAllCategorySelects('RIPADOS');
   document.getElementById('fCategoria').value = 'RIPADOS';
   updateSubcatOptions();
   document.getElementById('fSubcategoria').value = '';
@@ -154,7 +223,7 @@ function saveProd() {
   const codigo = document.getElementById('fCodigo').value.trim();
   const produto = document.getElementById('fProduto').value.trim();
   const valorRaw = document.getElementById('fValor').value.trim().replace(',', '.');
-  const categoria = document.getElementById('fCategoria').value;
+  const categoria = rememberCategory(document.getElementById('fCategoria').value);
   const subcategoria = document.getElementById('fSubcategoria').value;
 
   if (!codigo || !produto || !valorRaw || !categoria) {
@@ -182,6 +251,7 @@ function saveProd() {
   }
 
   setProdutos(lista);
+  refreshCategoryList();
   clearForm();
   renderAdminTable();
 }
@@ -195,6 +265,7 @@ function editProd(id) {
   document.getElementById('fCodigo').value = p.codigo;
   document.getElementById('fProduto').value = p.produto;
   document.getElementById('fValor').value = String(p.valor).replace('.', ',');
+  populateAllCategorySelects(p.categoria);
   document.getElementById('fCategoria').value = p.categoria;
   updateSubcatOptions();
   document.getElementById('fSubcategoria').value = p.subcategoria || '';
@@ -239,7 +310,9 @@ function importJSON() {
         if (!Array.isArray(data)) throw new Error('Formato inválido');
         // ensure all items have id
         data.forEach((p, i) => { if (!p.id) p.id = 'p_imp_' + i + '_' + Date.now(); });
+        data.forEach(p => { p.categoria = rememberCategory(p.categoria || 'OUTROS'); });
         setProdutos(data);
+        populateAllCategorySelects();
         renderAdminTable();
         toast('Importado: ' + data.length + ' produtos.');
       } catch {
@@ -279,7 +352,66 @@ function parseBRNumber(value) {
 function normalizeCategory(value, fallback) {
   const key = normalizeKey(value);
   const found = CATEGORIAS_LIST.find(cat => normalizeKey(cat) === key);
-  return found || fallback || 'RIPADOS';
+  if (found) return found;
+  const custom = categoryIdFromName(value);
+  return custom ? rememberCategory(custom) : (fallback || 'OUTROS');
+}
+
+function inferKnownCategory(produto) {
+  const text = ' ' + normalizeText(produto).toLowerCase().replace(/[^a-z0-9]+/g, ' ') + ' ';
+  const rules = [
+    { id: 'PORTAIS',    test: /\bportais?\b|\bportal\b/ },
+    { id: 'PORTAS',     test: /\bportas?\b|\bpranchetas?\b|\bmacicas?\b|\bsolidas?\b/ },
+    { id: 'ASSOALHOS',  test: /\ba+s+o+a+l+h?o?s?\b|\basoalhos?\b|\bassoalhos?\b/ },
+    { id: 'ALISARES',   test: /\balisares?\b|\balizares?\b|\bguarnicoes?\b|\bguarnicao\b/ },
+    { id: 'DECKS',      test: /\bdecks?\b/ },
+    { id: 'FECHADURAS', test: /\bfechaduras?\b|\bfeixos?\b|\bfecho\b/ },
+    { id: 'LAMBRIL',    test: /\blambris?\b|\blambril\b/ },
+    { id: 'PUXADORES',  test: /\bpuxadores?\b/ },
+    { id: 'RIPADOS',    test: /\bripados?\b/ },
+    { id: 'TÁBOAS',     test: /\btaboas?\b|\btabuas?\b|\btaboes?\b/ },
+  ];
+  const found = rules.find(rule => rule.test.test(text));
+  return found ? found.id : '';
+}
+
+function getCategorySeed(produto) {
+  const words = normalizeText(produto)
+    .toUpperCase()
+    .replace(/[^A-Z0-9À-Ú\s]/g, ' ')
+    .split(/\s+/)
+    .filter(word => word.length >= 4 && !['COMERCIAL', 'EXTRA', 'CURTO', 'CURTA', 'CM', 'MM', 'COM'].includes(word));
+  return words[0] || '';
+}
+
+function pluralizeCategorySeed(seed) {
+  if (!seed) return '';
+  if (seed.endsWith('S')) return seed;
+  if (seed.endsWith('L')) return seed.slice(0, -1) + 'IS';
+  return seed + 'S';
+}
+
+function autoCategorizeRecords(records, defaultCategoria, defaultSubcategoria) {
+  const seedCounts = new Map();
+  records.forEach(record => {
+    if (record.categoriaSource === 'report') return;
+    const known = inferKnownCategory(record.produto);
+    if (known) return;
+    const seed = getCategorySeed(record.produto);
+    if (seed) seedCounts.set(seed, (seedCounts.get(seed) || 0) + 1);
+  });
+
+  return records.map(record => {
+    if (record.categoriaSource === 'report') return record;
+    const known = inferKnownCategory(record.produto);
+    if (known) return { ...record, categoria: rememberCategory(known), subcategoria: normalizeSubcategory(record.subcategoria, known, ''), categoriaSource: 'inferred' };
+
+    const seed = getCategorySeed(record.produto);
+    const created = seed && seedCounts.get(seed) >= 2 ? pluralizeCategorySeed(seed) : '';
+    const categoria = rememberCategory(created || defaultCategoria || 'OUTROS');
+    const subcategoria = categoria === defaultCategoria ? defaultSubcategoria : '';
+    return { ...record, categoria, subcategoria, categoriaSource: created ? 'inferred' : 'default' };
+  });
 }
 
 function normalizeSubcategory(value, categoria, fallback = '') {
@@ -343,20 +475,29 @@ function recordsFromRows(rows, defaultCategoria, defaultSubcategoria) {
       const valor = parseBRNumber(row[header.map.valor]);
       if (!codigo || !produto || !Number.isFinite(valor)) return;
       const categoriaRaw = Number.isInteger(header.map.categoria) ? row[header.map.categoria] : '';
+      const hasReportCategory = !!String(categoriaRaw ?? '').trim();
       const categoria = normalizeCategory(categoriaRaw, defaultCategoria);
       const subRaw = Number.isInteger(header.map.subcategoria) ? row[header.map.subcategoria] : '';
       const subcategoria = normalizeSubcategory(subRaw, categoria, defaultSubcategoria);
-      records.push({ codigo, produto, valor, categoria, subcategoria, sourceRow: header.rowIndex + idx + 2 });
+      records.push({
+        codigo,
+        produto,
+        valor,
+        categoria,
+        subcategoria,
+        categoriaSource: hasReportCategory ? 'report' : 'auto',
+        sourceRow: header.rowIndex + idx + 2,
+      });
     });
   }
 
-  if (records.length > 0) return records;
+  if (records.length > 0) return autoCategorizeRecords(records, defaultCategoria, defaultSubcategoria);
 
   rows.forEach((row, idx) => {
     const record = extractRecordFromLine(row.join(' '), idx + 1, defaultCategoria, defaultSubcategoria);
     if (record) records.push(record);
   });
-  return records;
+  return autoCategorizeRecords(records, defaultCategoria, defaultSubcategoria);
 }
 
 async function parseExcelReport(file, defaultCategoria, defaultSubcategoria) {
@@ -420,11 +561,17 @@ function buildImportPlan(records) {
     seen.add(codigo);
     const found = byCode.get(codigo);
     if (found) {
+      const shouldUpdateCategory = ['report', 'inferred'].includes(record.categoriaSource);
       changes.push({
         type: 'update',
         index: found.index,
         before: found.product,
-        after: { ...found.product, valor: record.valor },
+        after: {
+          ...found.product,
+          valor: record.valor,
+          categoria: shouldUpdateCategory ? record.categoria : found.product.categoria,
+          subcategoria: shouldUpdateCategory ? record.subcategoria : found.product.subcategoria,
+        },
         record,
       });
     } else {
@@ -566,6 +713,8 @@ function applyImportReport() {
   });
 
   setProdutos(lista);
+  refreshCategoryList();
+  populateAllCategorySelects();
   renderAdminTable();
   clearImportPreview();
   toast(`Importação aplicada: ${updated} atualizados, ${created} cadastrados.`);
@@ -576,6 +725,8 @@ function resetData() {
   if (!confirm('Restaurar dados originais? Alterações serão perdidas.')) return;
   localStorage.removeItem('produtos');
   getProdutos(); // re-seeds from PRODUTOS_INICIAIS
+  refreshCategoryList();
+  populateAllCategorySelects();
   renderAdminTable();
   toast('Dados restaurados!');
 }
@@ -776,8 +927,8 @@ async function publishToGitHub() {
 // ── Init ──────────────────────────────────────────────────────────────
 ensureIds();
 initGHCard();
-populateCatSelect('filterCat');
-populateImportCatSelect();
+refreshCategoryList();
+populateAllCategorySelects('RIPADOS');
 updateSubcatOptions();
 renderAdminTable();
 

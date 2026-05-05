@@ -93,6 +93,7 @@
       </div>
       <div class="form-actions">
         <button class="btn btn-success" onclick="saveProd()">💾 Salvar</button>
+        <button class="btn btn-secondary" onclick="createCategory()">➕ Criar categoria</button>
         <button id="btnCancelEdit" class="btn btn-secondary" style="display:none" onclick="clearForm()">✕ Cancelar edição</button>
       </div>
     </div>
@@ -116,7 +117,7 @@
           </select>
         </div>
       </div>
-      <p class="import-hint">O importador procura primeiro pelo código. Se encontrar, atualiza o preço. Se não encontrar, cadastra o produto usando a categoria do relatório ou a categoria padrão escolhida aqui.</p>
+      <p class="import-hint">O importador procura primeiro pelo código. Ele lê o nome do produto para sugerir categoria, cria categorias repetidas que ainda não existem e usa a categoria padrão apenas quando não conseguir identificar.</p>
       <div class="form-actions">
         <button class="btn btn-success" onclick="importReport()">📄 Importar relatório</button>
         <button class="btn btn-secondary" onclick="clearImportPreview()">Limpar prévia</button>
