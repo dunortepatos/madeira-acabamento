@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#c0392b" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Tabela de Preços" />
+  <title>Tabela de Preços</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ── Header ───────────────────────────────────────────────────────── -->
+  <header class="header">
+    <h1>Tabela de <span>Preços</span></h1>
+    <div class="header-right">
+      <a href="admin.html" class="btn btn-secondary btn-icon" title="Painel Admin">⚙️</a>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- ── Screen: Home ─────────────────────────────────────────────── -->
+    <section id="screen-home" class="screen active">
+      <p class="page-title">Selecione uma categoria</p>
+      <div id="catGrid" class="category-grid"></div>
+    </section>
+
+    <!-- ── Screen: Subcategory ──────────────────────────────────────── -->
+    <section id="screen-subcat" class="screen">
+      <div class="back-row">
+        <button class="btn btn-secondary btn-icon" onclick="showScreen('screen-home')">← Voltar</button>
+        <span class="breadcrumb">Categorias › <strong id="subcatTitle"></strong></span>
+      </div>
+      <div id="subcatGrid" class="subcat-grid"></div>
+    </section>
+
+    <!-- ── Screen: Products ─────────────────────────────────────────── -->
+    <section id="screen-products" class="screen">
+      <div class="back-row">
+        <button class="btn btn-secondary btn-icon" id="btnBackProd">← Voltar</button>
+        <span class="breadcrumb" id="prodTitle"></span>
+      </div>
+
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="search" id="searchInput" placeholder="Buscar por código ou produto…" autocomplete="off" />
+      </div>
+
+      <p class="result-count" id="resultCount"></p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th id="th-codigo"  onclick="onSort('codigo')">Código <span class="sort-arrow">⇅</span></th>
+              <th id="th-produto" onclick="onSort('produto')">Produto <span class="sort-arrow">⇅</span></th>
+              <th id="th-valor"   onclick="onSort('valor')"  style="text-align:right">Valor <span class="sort-arrow">⇅</span></th>
+            </tr>
+          </thead>
+          <tbody id="prodTbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── Modal de cálculo ───────────────────────────────────────────── -->
+  <div id="calcModal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modalProduto"></h3>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-unit-price">Preço unitário: <strong id="modalPrecoUnit"></strong></p>
+        <span class="modal-qty-label">Quantidade</span>
+        <div class="qty-controls">
+          <button class="qty-btn" onclick="changeQty(-1)">−</button>
+          <input class="qty-input" id="modalQty" type="number" value="1" min="1" oninput="calcTotal()" />
+          <button class="qty-btn" onclick="changeQty(1)">+</button>
+        </div>
+        <div class="modal-total-row">
+          <span class="modal-total-label">Total</span>
+          <span class="modal-total-value" id="modalTotal">R$ 0,00</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="closeModal()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="produtos.js"></script>
+  <script src="script.js"></script>
+  <script>
+    // Wire back button: go to subcat if has subcategories, else home
+    document.getElementById('btnBackProd').addEventListener('click', () => {
+      const cat = window.CATEGORIAS
+        ? CATEGORIAS.find(c => c.id === state.categoria)
+        : null;
+      if (cat && cat.sub.length > 0) {
+        showScreen('screen-subcat');
+      } else {
+        showScreen('screen-home');
+      }
+    });
+  </script>
+</body>
+</html>
