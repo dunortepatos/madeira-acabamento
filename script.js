@@ -202,17 +202,45 @@ function closeModal() {
   document.getElementById('calcModal').classList.remove('open');
 }
 
+function parseQuantity(value) {
+  const normalized = String(value).replace(',', '.');
+  const qty = Number.parseFloat(normalized);
+  if (!Number.isFinite(qty) || qty <= 0) return 1;
+  return Math.round(qty * 100) / 100;
+}
+
+function clampQuantityInput(input) {
+  const raw = input.value.replace(/[^\d,.]/g, '');
+  const separator = raw.includes(',') ? ',' : '.';
+  const parts = raw.split(/[,.]/);
+  const integer = parts.shift() || '';
+  const decimals = parts.join('');
+  input.value = raw.includes('.') || raw.includes(',')
+    ? `${integer}${separator}${decimals.slice(0, 2)}`
+    : integer;
+}
+
 function calcTotal() {
-  const qty = Math.max(1, parseInt(document.getElementById('modalQty').value) || 1);
-  document.getElementById('modalQty').value = qty;
+  const input = document.getElementById('modalQty');
+  clampQuantityInput(input);
+  const qty = parseQuantity(input.value);
   document.getElementById('modalTotal').textContent = formatBRL(_modalValorUnit * qty);
+}
+
+function formatQtyInput() {
+  const input = document.getElementById('modalQty');
+  const qty = parseQuantity(input.value);
+  input.value = Number.isInteger(qty)
+    ? String(qty)
+    : qty.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  calcTotal();
 }
 
 function changeQty(delta) {
   const input = document.getElementById('modalQty');
-  const current = parseInt(input.value) || 1;
-  const next = Math.max(1, current + delta);
-  input.value = next;
+  const current = parseQuantity(input.value);
+  const next = Math.max(0.01, Math.round((current + delta) * 100) / 100);
+  input.value = Number.isInteger(next) ? String(next) : next.toFixed(2);
   calcTotal();
 }
 

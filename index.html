@@ -85,7 +85,7 @@
         <span class="modal-qty-label">Quantidade</span>
         <div class="qty-controls">
           <button class="qty-btn" onclick="changeQty(-1)">−</button>
-          <input class="qty-input" id="modalQty" type="number" value="1" min="1" oninput="calcTotal()" />
+          <input class="qty-input" id="modalQty" type="text" value="1" inputmode="decimal" autocomplete="off" oninput="calcTotal()" onblur="formatQtyInput()" />
           <button class="qty-btn" onclick="changeQty(1)">+</button>
         </div>
         <div class="modal-total-row">
